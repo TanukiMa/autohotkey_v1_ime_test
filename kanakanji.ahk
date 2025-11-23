@@ -1,9 +1,8 @@
-; kanakanji.ahk - IME自動変換スクリプト（Microsoft IME最適化版）
+; kanakanji.ahk - IME自動変換スクリプト（Microsoft IME最適化版 - 入力速度調整）
 ; 同一Notepadウィンドウを使い回して効率的に処理
 #NoEnv
 #SingleInstance Force
 SetBatchLines, -1
-SendMode Input
 SetWorkingDir %A_ScriptDir%
 
 ; IME.ahkをインクルード（同じディレクトリに配置必須）
@@ -13,11 +12,15 @@ SetWorkingDir %A_ScriptDir%
 ; グローバル設定値（Microsoft IME用デフォルト値）
 ; ============================================================
 global SLEEP_IME_ACTIVATE := 300      ; IME起動待ち
-global SLEEP_AFTER_INPUT := 2000       ; 入力後待ち
+global SLEEP_AFTER_INPUT := 500       ; 入力後待ち（400→500に増加）
 global SLEEP_AFTER_CONVERT := 500     ; 変換後待ち（最重要）
 global SLEEP_AFTER_CONFIRM := 200     ; 確定後待ち
 global SLEEP_CLIPBOARD := 150         ; クリップボード待ち
 global CLIPBOARD_TIMEOUT := 30        ; クリップボード取得タイムアウト（回数）
+
+; キーストローク間の遅延設定（Microsoft IME対策）
+global KEY_DELAY := 10                ; 各キー入力間の遅延（ミリ秒）
+global KEY_PRESS_DURATION := 10       ; 各キーの押下時間（ミリ秒）
 
 ; Notepad関連
 global notepadHwnd := 0
@@ -99,13 +102,14 @@ PrepareNotepad()
 }
 
 ; ============================================================
-; IMEで変換する関数（設定可能な待ち時間）
+; IMEで変換する関数（入力速度を抑制）
 ; ============================================================
 ConvertWithIME(text)
 {
     global notepadHwnd
     global SLEEP_IME_ACTIVATE, SLEEP_AFTER_INPUT, SLEEP_AFTER_CONVERT
     global SLEEP_AFTER_CONFIRM, SLEEP_CLIPBOARD, CLIPBOARD_TIMEOUT
+    global KEY_DELAY, KEY_PRESS_DURATION
     
     ; ウィンドウの存在確認
     if !WinExist("ahk_id " . notepadHwnd)
@@ -124,23 +128,32 @@ ConvertWithIME(text)
     Send, {Delete}
     Sleep, 50
     
-    ; ① IMEをオンにする（設定値使用）
+    ; ① IMEをオンにする
     IME_SET(1, "ahk_id " . notepadHwnd)
     Sleep, %SLEEP_IME_ACTIVATE%
     
-    ; ② ひらがなを入力（設定値使用）
-    SendInput, %text%
+    ; ② ひらがなを入力（速度を抑制）
+    ; SendInputではなくSendを使用し、キーストローク間に遅延を設定
+    SetKeyDelay, %KEY_DELAY%, %KEY_PRESS_DURATION%
+    SendMode Event  ; より確実な送信モード
+    
+    Send, %text%
+    
+    ; SendModeを元に戻す
+    SendMode Input
+    
+    ; 入力完了を十分待つ
     Sleep, %SLEEP_AFTER_INPUT%
     
-    ; ③ スペースキーで変換（第一候補）（設定値使用・最重要）
+    ; ③ スペースキーで変換（第一候補）
     Send, {Space}
     Sleep, %SLEEP_AFTER_CONVERT%
     
-    ; ④ Enterで確定（設定値使用）
+    ; ④ Enterで確定
     Send, {Enter}
     Sleep, %SLEEP_AFTER_CONFIRM%
     
-    ; ⑤ 結果をクリップボードにコピー（設定値使用）
+    ; ⑤ 結果をクリップボードにコピー
     Clipboard := ""
     Send, ^a
     Sleep, 100
