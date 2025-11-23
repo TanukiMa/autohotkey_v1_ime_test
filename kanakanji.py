@@ -1,11 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-kanakanji.py - IMEを使用してひらがなを漢字に変換するツール（デバッグ版）
-
-使用方法:
-    python kanakanji.py input.txt -o output.txt --debug
-    python kanakanji.py input.txt -o output.txt --debug --log msime_debug.log
+kanakanji.py - IMEを使用してひらがなを漢字に変換するツール（完全修正版）
 """
 
 import argparse
@@ -19,16 +15,10 @@ from datetime import datetime
 
 
 def find_autohotkey():
-    """
-    AutoHotkey.exeのパスを検索する
-    
-    Returns:
-        str: AutoHotkey.exeのフルパス、見つからない場合はNone
-    """
+    """AutoHotkey.exeのパスを検索"""
     common_paths = [
         r"C:\Program Files\AutoHotkey\AutoHotkey.exe",
         r"C:\Program Files\AutoHotkey\v1.1.37.02\AutoHotkey.exe",
-        r"C:\Program Files\AutoHotkey\v1.1.36.02\AutoHotkey.exe",
         r"C:\Program Files (x86)\AutoHotkey\AutoHotkey.exe",
         os.path.expanduser(r"~\AppData\Local\Programs\AutoHotkey\AutoHotkey.exe"),
     ]
@@ -37,11 +27,7 @@ def find_autohotkey():
         if os.path.exists(path):
             return path
     
-    ahk_path = shutil.which("AutoHotkey.exe")
-    if ahk_path:
-        return ahk_path
-    
-    return None
+    return shutil.which("AutoHotkey.exe")
 
 
 def log_debug(message, debug=False):
@@ -49,35 +35,71 @@ def log_debug(message, debug=False):
     if debug:
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
         print(f"[{timestamp}] {message}", file=sys.stderr)
+        sys.stderr.flush()
+
+
+def load_input_lines(input_file, max_length=100, debug=False):
+    """
+    入力ファイルを読み込み、1行ずつ処理
+    
+    Args:
+        input_file: 入力ファイルパス
+        max_length: 1行の最大文字数
+        debug: デバッグモード
+    
+    Returns:
+        有効な行のリスト
+    """
+    input_lines = []
+    
+    try:
+        with open(input_file, 'r', encoding='utf-8') as f:
+            for line_num, line in enumerate(f, 1):
+                # 改行を除去（\r\nと\nの両方に対応）
+                line = line.rstrip('\r\n')
+                
+                # 空行とコメント行をスキップ
+                if not line or line.startswith('#'):
+                    log_debug(f"Line {line_num}: Skipped (empty or comment)", debug)
+                    continue
+                
+                # 文字数チェック
+                if len(line) > max_length:
+                    log_debug(f"Line {line_num}: WARNING - Too long ({len(line)} chars), truncating to {max_length}", debug)
+                    line = line[:max_length]
+                
+                # 制御文字を除去
+                line = ''.join(char for char in line if ord(char) >= 32 or char in '\t\n\r')
+                
+                if line:  # 空でない場合のみ追加
+                    input_lines.append(line)
+                    log_debug(f"Line {line_num}: Loaded [{line}] ({len(line)} chars)", debug)
+                else:
+                    log_debug(f"Line {line_num}: Skipped (became empty after cleaning)", debug)
+    
+    except FileNotFoundError:
+        print(f"Error: 入力ファイル '{input_file}' が見つかりません", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error reading input file: {e}", file=sys.stderr)
+        sys.exit(1)
+    
+    return input_lines
 
 
 def convert_with_ime(input_file, output_file, ahk_script="kanakanji.ahk", 
-                     sleep_convert=None, log_file=None, debug=False):
-    """
-    入力ファイルからひらがなを読み込み、AutoHotkeyスクリプトでIME変換
-    
-    Args:
-        input_file (str): 入力ファイルパス（ひらがな、1行1フレーズ）
-        output_file (str): 出力ファイルパス
-        ahk_script (str): AutoHotkeyスクリプトのパス
-        sleep_convert (int): 変換処理後の待ち時間（ミリ秒）
-        log_file (str): ログファイル名
-        debug (bool): デバッグモード
-    """
+                     sleep_convert=None, log_file=None, max_length=100, debug=False):
+    """IME変換処理"""
     
     log_debug("=== Python Debug Log Started ===", debug)
     
-    # デフォルトログファイル名
     if log_file is None:
         log_file = "kanakanji_debug.log"
-    
-    log_debug(f"Log file: {log_file}", debug)
     
     # AutoHotkeyの実行ファイルパスを検索
     ahk_exe = find_autohotkey()
     if not ahk_exe:
         print("Error: AutoHotkey.exe が見つかりません", file=sys.stderr)
-        print("https://www.autohotkey.com/ からダウンロードしてインストールしてください", file=sys.stderr)
         sys.exit(1)
     
     log_debug(f"Using AutoHotkey: {ahk_exe}", debug)
@@ -87,61 +109,46 @@ def convert_with_ime(input_file, output_file, ahk_script="kanakanji.ahk",
         print(f"Error: {ahk_script} が見つかりません", file=sys.stderr)
         sys.exit(1)
     
-    log_debug(f"Using AHK script: {os.path.abspath(ahk_script)}", debug)
-    
     # IME.ahkの存在確認
     ime_ahk_path = os.path.join(os.path.dirname(os.path.abspath(ahk_script)), "IME.ahk")
     if not os.path.exists(ime_ahk_path):
         print(f"Error: IME.ahk が見つかりません", file=sys.stderr)
-        print(f"Expected location: {ime_ahk_path}", file=sys.stderr)
         sys.exit(1)
     
-    log_debug(f"Found IME.ahk: {ime_ahk_path}", debug)
-    
-    # 入力ファイルを読み込み
-    try:
-        with open(input_file, 'r', encoding='utf-8') as f:
-            input_lines = [line.strip() for line in f if line.strip()]
-    except FileNotFoundError:
-        print(f"Error: 入力ファイル '{input_file}' が見つかりません", file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:
-        print(f"Error reading input file: {e}", file=sys.stderr)
-        sys.exit(1)
+    # 入力ファイルを読み込み（改善版）
+    input_lines = load_input_lines(input_file, max_length, debug)
     
     if not input_lines:
-        print("Warning: 入力ファイルが空です", file=sys.stderr)
+        print("Warning: 入力ファイルに有効な行がありません", file=sys.stderr)
         sys.exit(1)
     
-    log_debug(f"Loaded {len(input_lines)} lines from input file", debug)
+    log_debug(f"Loaded {len(input_lines)} valid lines from input file", debug)
     
-    print(f"Processing {len(input_lines)} lines...")
+    print(f"Processing {len(input_lines)} lines (max {max_length} chars per line)...")
     if sleep_convert:
         print(f"Custom convert sleep time: {sleep_convert}ms")
-        log_debug(f"Custom convert sleep: {sleep_convert}ms", debug)
-    else:
-        print(f"Using default settings (Microsoft IME optimized)")
     
     if debug:
-        print(f"Debug mode enabled - detailed logs will be written to {log_file}")
+        print(f"Debug mode enabled - logs will be written to {log_file}")
     
-    print("(処理中はNotepadウィンドウが前面に表示されます)")
-    print()
+    print("\n" + "="*60)
+    print("重要: Notepadが起動したら、以下の設定を行ってください：")
+    print("  1. IMEをONにする")
+    print("  2. 入力モードを「ひらがな」に設定")
+    print("  3. 10秒後に自動的に処理が開始されます")
+    print("="*60 + "\n")
     
     results = []
     
     try:
         # AutoHotkeyプロセスを起動
-        # 引数: [ahk_exe, script, sleep_convert, log_file]
         cmd = [ahk_exe, ahk_script]
         
-        # 第1引数: sleep_convert（指定がない場合は "default"）
         if sleep_convert:
             cmd.append(str(sleep_convert))
         else:
             cmd.append("default")
         
-        # 第2引数: log_file
         cmd.append(log_file)
         
         log_debug(f"Starting AHK process: {' '.join(cmd)}", debug)
@@ -152,7 +159,9 @@ def convert_with_ime(input_file, output_file, ahk_script="kanakanji.ahk",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            encoding='utf-8'
+            encoding='utf-8',
+            bufsize=1,
+            universal_newlines=True
         )
         
         log_debug("AHK process started", debug)
@@ -163,38 +172,63 @@ def convert_with_ime(input_file, output_file, ahk_script="kanakanji.ahk",
             log_debug(f"Input: [{line}] (length: {len(line)})", debug)
             
             # 進捗表示
-            print(f"[{i:3d}/{len(input_lines)}] Converting: {line[:40]:<40}", end='\r')
+            print(f"[{i:3d}/{len(input_lines)}] Converting: {line[:50]:<50}", end='', flush=True)
             
             # AHKスクリプトに送信
             send_time = time.time()
-            process.stdin.write(line + '\n')
-            process.stdin.flush()
-            log_debug(f"Sent to AHK at {send_time:.3f}", debug)
+            try:
+                # 重要：改行コードは\nのみを送信
+                process.stdin.write(line + '\n')
+                process.stdin.flush()
+                log_debug(f"Sent to AHK: [{line}]", debug)
+            except BrokenPipeError:
+                print("\nError: AHK process terminated unexpectedly", file=sys.stderr)
+                log_debug("ERROR: Broken pipe", debug)
+                break
             
             # 結果を受信
             receive_start = time.time()
-            result = process.stdout.readline().strip()
-            receive_time = time.time()
+            try:
+                result = process.stdout.readline()
+                if not result:
+                    print("\nError: No output from AHK", file=sys.stderr)
+                    log_debug("ERROR: EOF from AHK stdout", debug)
+                    break
+                
+                # 改行を除去
+                result = result.rstrip('\r\n')
+                receive_time = time.time()
+                
+                # INFO行をスキップ
+                while result.startswith("INFO:"):
+                    log_debug(f"AHK Info: {result}", debug)
+                    result = process.stdout.readline().rstrip('\r\n')
+                
+            except Exception as e:
+                print(f"\nError reading from AHK: {e}", file=sys.stderr)
+                log_debug(f"ERROR: {e}", debug)
+                break
             
-            # INFO行をスキップ
-            while result.startswith("INFO:"):
-                log_debug(f"AHK Info: {result}", debug)
-                result = process.stdout.readline().strip()
-            
-            log_debug(f"Received from AHK at {receive_time:.3f} (took {(receive_time - send_time):.3f}s)", debug)
-            log_debug(f"Output: [{result}] (length: {len(result)})", debug)
+            log_debug(f"Received: [{result}] (took {(receive_time - send_time):.3f}s)", debug)
             
             # 結果の検証
+            warnings = []
             if ' ' in result and result != line:
-                log_debug(f"WARNING: Output contains unexpected spaces", debug)
-            
+                warnings.append("spaces")
             if result == line:
-                log_debug(f"WARNING: Output equals input (no conversion occurred)", debug)
+                warnings.append("no conversion")
+            if not result:
+                warnings.append("empty")
             
-            results.append(result)
+            if warnings:
+                print(f" [WARNING: {', '.join(warnings)}]", end='')
             
-            if debug:
-                print(f"\n  Input:  {line}")
+            print()  # 改行
+            
+            results.append(result if result else line)  # 空の場合は元の入力を保存
+            
+            if debug and result:
+                print(f"  Input:  {line}")
                 print(f"  Output: {result}")
         
         # プロセスを終了
@@ -203,106 +237,58 @@ def convert_with_ime(input_file, output_file, ahk_script="kanakanji.ahk",
         process.wait(timeout=10)
         log_debug("AHK process closed", debug)
         
-        print("\n")
-        print("✓ Conversion completed.")
+        print("\n✓ Conversion completed.")
         
     except subprocess.TimeoutExpired:
         process.kill()
-        print("\nError: AutoHotkey process timeout", file=sys.stderr)
-        log_debug("ERROR: Process timeout", debug)
+        print("\nError: Process timeout", file=sys.stderr)
         sys.exit(1)
     except KeyboardInterrupt:
         process.kill()
         print("\n\nInterrupted by user", file=sys.stderr)
-        log_debug("ERROR: Interrupted by user", debug)
         sys.exit(1)
     except Exception as e:
-        print(f"\nError during conversion: {e}", file=sys.stderr)
-        log_debug(f"ERROR: {e}", debug)
+        print(f"\nError: {e}", file=sys.stderr)
         if process:
             process.kill()
         sys.exit(1)
     
-    # 結果を出力ファイルに保存
+    # 結果を出力
     try:
-        log_debug(f"Writing results to {output_file}", debug)
-        with open(output_file, 'w', encoding='utf-8') as f:
+        with open(output_file, 'w', encoding='utf-8', newline='\n') as f:
             for result in results:
                 f.write(result + '\n')
         print(f"✓ Results saved to: {output_file}")
-        log_debug(f"Results written successfully", debug)
     except Exception as e:
-        print(f"Error writing output file: {e}", file=sys.stderr)
-        log_debug(f"ERROR writing output: {e}", debug)
+        print(f"Error writing output: {e}", file=sys.stderr)
         sys.exit(1)
     
     if debug:
-        print(f"\n✓ Debug log saved to: {log_file}")
-        log_debug("=== Python Debug Log Completed ===", debug)
+        print(f"\n✓ Debug log: {log_file}")
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='IMEを使用してひらがなを漢字に変換するツール（デバッグ版）',
+        description='IMEを使用してひらがなを漢字に変換（完全修正版）',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 使用例:
-  # 通常実行
-  python kanakanji.py input.txt -o output.txt
-  
-  # デバッグモード（デフォルトログファイル: kanakanji_debug.log）
   python kanakanji.py input.txt -o output.txt --debug
   
-  # デバッグモード + カスタムログファイル
-  python kanakanji.py input.txt -o output.txt --debug --log msime_debug.log
-  
-  # 異なるIMEでテスト（ログを分ける）
-  python kanakanji.py input.txt -o output_msime.txt --debug --log msime.log
-  python kanakanji.py input.txt -o output_google.txt --debug --log google.log --sleep-convert 300
-  python kanakanji.py input.txt -o output_mozc.txt --debug --log mozc.log --sleep-convert 400
-  
-デバッグモード:
-  --debug を指定すると、以下の詳細情報がログに記録されます：
-  - Python側: 標準エラー出力に詳細ログ
-  - AHK側: 指定したログファイルに詳細ログ
-    - 各処理ステップのタイムスタンプ
-    - IME状態の変化
-    - キー入力のタイミング
-    - クリップボードの内容
-    - Sleep時間の詳細
+入力ファイル形式:
+  - 1行1フレーズ（ひらがなのみ）
+  - 空行・コメント行（#）は無視
+  - 1行の最大文字数: 100文字（デフォルト）
         """
     )
     
-    parser.add_argument(
-        'input_file',
-        help='入力ファイル（ひらがな、1行1フレーズ）'
-    )
-    parser.add_argument(
-        '-o', '--output',
-        required=True,
-        help='出力ファイル（変換結果）'
-    )
-    parser.add_argument(
-        '--ahk-script',
-        default='kanakanji.ahk',
-        help='AutoHotkeyスクリプトのパス（デフォルト: kanakanji.ahk）'
-    )
-    parser.add_argument(
-        '--sleep-convert',
-        type=int,
-        metavar='MILLISECONDS',
-        help='変換処理後の待ち時間（ミリ秒）'
-    )
-    parser.add_argument(
-        '--log',
-        metavar='LOGFILE',
-        help='ログファイル名（デフォルト: kanakanji_debug.log）'
-    )
-    parser.add_argument(
-        '--debug',
-        action='store_true',
-        help='デバッグモード（詳細ログを出力）'
-    )
+    parser.add_argument('input_file', help='入力ファイル')
+    parser.add_argument('-o', '--output', required=True, help='出力ファイル')
+    parser.add_argument('--ahk-script', default='kanakanji.ahk', help='AHKスクリプト')
+    parser.add_argument('--sleep-convert', type=int, help='変換待ち時間（ms）')
+    parser.add_argument('--log', help='ログファイル名')
+    parser.add_argument('--max-length', type=int, default=100, help='1行の最大文字数（デフォルト: 100）')
+    parser.add_argument('--debug', action='store_true', help='デバッグモード')
     
     args = parser.parse_args()
     
@@ -312,6 +298,7 @@ def main():
         args.ahk_script,
         args.sleep_convert,
         args.log,
+        args.max_length,
         args.debug
     )
 
