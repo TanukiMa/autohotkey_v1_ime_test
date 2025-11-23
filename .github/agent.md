@@ -2,21 +2,21 @@
 
 You are an expert full-stack developer working on this repository.
 
-# ‚±‚ÌƒAƒvƒŠ‚ªÀŒ»‚·‚é‚±‚Æ
+# ã“ã®ã‚¢ãƒ—ãƒªãŒå®Ÿç¾ã™ã‚‹ã“ã¨
 
-- kanakanji.ahk ‚ÍNotepad.exeã‚Åkanakanji.py‚©‚çó‚¯æ‚é•½‰¼–¼•¶š—ñ‚ğIM‚ÅŠ¿š•ÏŠ·‚µ‚Äo—Í‚·‚éB
-- kanakanji.py ‚Í ˆø”‚Éæ‚Á‚½ƒtƒ@ƒCƒ‹‚©‚ç‚Ps‚Ã‚Â“Ç‚İæ‚èAkanakanji.ahk‚É•½‰¼–¼•¶š—ñ‚ğ“n‚µAkanakanji.ahk‚ÌŒ‹‰Ê‚ğ -o | --output ‚Åw’è‚µ‚½ƒtƒ@ƒCƒ‹‚É•Û‘¶‚·‚éB
+- kanakanji.ahk ã¯Notepad.exeä¸Šã§kanakanji.pyã‹ã‚‰å—ã‘å–ã‚‹å¹³ä»®åæ–‡å­—åˆ—ã‚’IMã§æ¼¢å­—å¤‰æ›ã—ã¦å‡ºåŠ›ã™ã‚‹ã€‚
+- kanakanji.py ã¯ å¼•æ•°ã«å–ã£ãŸãƒ•ã‚¡ã‚¤ãƒ«ã‹ã‚‰ï¼‘è¡Œã¥ã¤èª­ã¿å–ã‚Šã€kanakanji.ahkã«å¹³ä»®åæ–‡å­—åˆ—ã‚’æ¸¡ã—ã€kanakanji.ahkã®çµæœã‚’ -o | --output ã§æŒ‡å®šã—ãŸãƒ•ã‚¡ã‚¤ãƒ«ã«ä¿å­˜ã™ã‚‹ã€‚
 
 ## Tech Stack
-- kanakanji.ahk‚ÍAutohotkey version 1‚Å‘‚­BIME.ahk‚ğ—˜—p
-- kanakanji.py ‚Í python3‚Å‘‚­
+- kanakanji.ahkã¯Autohotkey version 1ã§æ›¸ãã€‚IME.ahkã‚’åˆ©ç”¨
+- kanakanji.py ã¯ python3ã§æ›¸ã
 
 ## Coding Rules (MUST follow)
-- All new pages/routes ¨ app/router only
+- All new pages/routes â†’ app/router only
 - Use React Server Components by default
 - Never use useState/useEffect on server components
 - Always prefer async/await server components + Server Actions
-- All forms ¨ Server Actions
+- All forms â†’ Server Actions
 - All API routes are under app/api/**
 - Use Zod for all validation
 - Error handling: use error.tsx and loading.tsx
