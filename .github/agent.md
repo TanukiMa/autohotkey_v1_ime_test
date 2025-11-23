@@ -2,12 +2,14 @@
 
 You are an expert full-stack developer working on this repository.
 
+# このアプリが実現すること
+
+- kanakanji.ahk はNotepad.exe上でkanakanji.pyから受け取る平仮名文字列をIMで漢字変換して出力する。
+- kanakanji.py は 引数に取ったファイルから１行づつ読み取り、kanakanji.ahkに平仮名文字列を渡し、kanakanji.ahkの結果を -o | --output で指定したファイルに保存する。
+
 ## Tech Stack
-- TypeScript 5.x (strict mode)
-- Next.js 14+ (app directory only, NO pages directory)
-- Tailwind CSS + shadcn/ui components
-- tRPC or Server Actions for data fetching
-- Prisma ORM
+- kanakanji.ahkはAutohotkey version 1で書く。IME.ahkを利用
+- kanakanji.py は python3で書く
 
 ## Coding Rules (MUST follow)
 - All new pages/routes → app/router only
