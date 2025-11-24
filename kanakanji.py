@@ -88,13 +88,20 @@ def load_input_lines(input_file, max_length=100, debug=False):
 
 
 def convert_with_ime(input_file, output_file, ahk_script="kanakanji.ahk", 
-                     sleep_convert=None, log_file=None, max_length=100, debug=False):
+                     sleep_convert=None, log_file=None, max_length=100, ime_mode="hiragana", debug=False):
     """IME変換処理"""
     
     log_debug("=== Python Debug Log Started ===", debug)
     
     if log_file is None:
         log_file = "kanakanji_debug.log"
+    
+    valid_ime_modes = {"hiragana", "fullalpha", "katakana", "direct"}
+    if ime_mode not in valid_ime_modes:
+        print(f"Error: Unsupported IME mode '{ime_mode}'. Choose from {', '.join(sorted(valid_ime_modes))}.", file=sys.stderr)
+        sys.exit(1)
+    
+    log_debug(f"Target IME mode: {ime_mode}", debug)
     
     # AutoHotkeyの実行ファイルパスを検索
     ahk_exe = find_autohotkey()
@@ -127,6 +134,7 @@ def convert_with_ime(input_file, output_file, ahk_script="kanakanji.ahk",
     print(f"Processing {len(input_lines)} lines (max {max_length} chars per line)...")
     if sleep_convert:
         print(f"Custom convert sleep time: {sleep_convert}ms")
+    print(f"Target IME mode: {ime_mode}")
     
     if debug:
         print(f"Debug mode enabled - logs will be written to {log_file}")
@@ -150,6 +158,7 @@ def convert_with_ime(input_file, output_file, ahk_script="kanakanji.ahk",
             cmd.append("default")
         
         cmd.append(log_file)
+        cmd.append(ime_mode)
         
         log_debug(f"Starting AHK process: {' '.join(cmd)}", debug)
         
@@ -288,6 +297,8 @@ def main():
     parser.add_argument('--sleep-convert', type=int, help='変換待ち時間（ms）')
     parser.add_argument('--log', help='ログファイル名')
     parser.add_argument('--max-length', type=int, default=100, help='1行の最大文字数（デフォルト: 100）')
+    parser.add_argument('--ime-mode', choices=['hiragana', 'fullalpha', 'katakana', 'direct'], default='hiragana',
+                        help='強制するIME入力モード（デフォルト: hiragana）')
     parser.add_argument('--debug', action='store_true', help='デバッグモード')
     
     args = parser.parse_args()
@@ -299,6 +310,7 @@ def main():
         args.sleep_convert,
         args.log,
         args.max_length,
+        args.ime_mode,
         args.debug
     )
 

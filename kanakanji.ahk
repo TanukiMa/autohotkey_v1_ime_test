@@ -48,9 +48,12 @@ global notepadHwnd := 0
 global conversionCount := 0
 
 ; IME変換モード定数
-global IME_CMODE_NATIVE := 1              ; ひらがな
-global IME_CMODE_ALPHANUMERIC := 9        ; 全角英数
+global IME_CMODE_NATIVE := 1              ; ひらがなビット
+global IME_CMODE_FULLSHAPE := 8           ; 全角ビット
+global IME_CMODE_ALPHANUMERIC := IME_CMODE_FULLSHAPE        ; 全角英数
 global IME_CMODE_KATAKANA := 25           ; 全角カタカナ
+global IME_TARGET_MODE := IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE
+global IME_MODE_NAME := "hiragana"
 
 ; コマンドライン引数から待ち時間を設定
 if (A_Args.Length() >= 1 && A_Args[1] != "" && A_Args[1] != "default")
@@ -63,6 +66,15 @@ if (A_Args.Length() >= 1 && A_Args[1] != "" && A_Args[1] != "default")
     }
 }
 
+if (A_Args.Length() >= 3 && A_Args[3] != "")
+{
+    ApplyImeMode(A_Args[3])
+}
+else
+{
+    ApplyImeMode("hiragana")
+}
+
 ; ログに設定値を記録
 LogWrite("--- Configuration (RELIABILITY MODE) ---")
 LogWrite("SLEEP_IME_ACTIVATE: " . SLEEP_IME_ACTIVATE . "ms")
@@ -73,6 +85,7 @@ LogWrite("SLEEP_AFTER_CONVERT: " . SLEEP_AFTER_CONVERT . "ms")
 LogWrite("SLEEP_AFTER_CONFIRM: " . SLEEP_AFTER_CONFIRM . "ms")
 LogWrite("KEY_DELAY: " . KEY_DELAY . "ms")
 LogWrite("KEY_PRESS_DURATION: " . KEY_PRESS_DURATION . "ms")
+LogWrite("IME_TARGET_MODE: " . IME_MODE_NAME . " (" . IME_TARGET_MODE . ")")
 LogWrite("----------------------------------------")
 
 ; Notepadを準備
@@ -120,6 +133,41 @@ LogWrite(message)
     FileAppend, %logLine%, %LOG_FILE%, UTF-8
 }
 
+ApplyImeMode(modeName)
+{
+    global IME_CMODE_NATIVE, IME_CMODE_FULLSHAPE, IME_TARGET_MODE, IME_MODE_NAME
+    resolvedMode := ResolveImeMode(modeName)
+    if (resolvedMode = "")
+    {
+        if (modeName != "")
+            LogWrite("WARNING: Unknown IME mode '" . modeName . "', falling back to hiragana")
+        resolvedMode := IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE
+        modeName := "hiragana"
+    }
+    if (modeName = "")
+        modeName := "hiragana"
+    IME_TARGET_MODE := resolvedMode
+    IME_MODE_NAME := modeName
+    LogWrite("IME mode request resolved to " . IME_MODE_NAME . " (" . IME_TARGET_MODE . ")")
+}
+
+ResolveImeMode(modeName)
+{
+    global IME_CMODE_NATIVE, IME_CMODE_FULLSHAPE, IME_CMODE_ALPHANUMERIC, IME_CMODE_KATAKANA
+    StringLower, lowered, modeName
+    if (lowered = "")
+        lowered := "hiragana"
+    if (lowered = "hiragana")
+        return IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE
+    else if (lowered = "fullalpha" || lowered = "fullwidthalpha" || lowered = "zenkakueisu")
+        return IME_CMODE_ALPHANUMERIC
+    else if (lowered = "katakana" || lowered = "fullkatakana" || lowered = "zenkakukatakana")
+        return IME_CMODE_KATAKANA
+    else if (lowered = "direct")
+        return 0
+    return ""
+}
+
 ; ============================================================
 ; IME入力モードを取得する関数
 ; ============================================================
@@ -131,9 +179,11 @@ GetIMEMode(winTitle)
     if (mode = 0)
         return "OFF/Direct"
     else if (mode = 1)
-        return "Hiragana"
-    else if (mode = 9)
+        return "Native"
+    else if (mode = 8)
         return "FullAlpha"
+    else if (mode = 9)
+        return "Hiragana"
     else if (mode = 25)
         return "FullKatakana"
     else
@@ -141,41 +191,41 @@ GetIMEMode(winTitle)
 }
 
 ; ============================================================
-; IME入力モードを「ひらがな」に強制設定する関数
+; IME入力モードを強制設定する関数
 ; ============================================================
-ForceHiraganaMode(winTitle)
+ForceImeMode(winTitle)
 {
-    global IME_CMODE_NATIVE, SLEEP_MODE_CHANGE
+    global IME_TARGET_MODE, IME_MODE_NAME, SLEEP_MODE_CHANGE
     
-    LogWrite(">>> ForceHiraganaMode: Starting")
+    LogWrite(">>> ForceImeMode: Starting (target=" . IME_MODE_NAME . ")")
     
     ; 現在のモードを確認
     currentMode := IME_GetConvMode(winTitle)
-    LogWrite(">>> ForceHiraganaMode: Current mode = " . GetIMEMode(winTitle) . " (" . currentMode . ")")
+    LogWrite(">>> ForceImeMode: Current mode = " . GetIMEMode(winTitle) . " (" . currentMode . ")")
     
-    ; ひらがなモードでない場合は設定
-    if (currentMode != IME_CMODE_NATIVE)
+    ; 目標モードでない場合は設定
+    if (currentMode != IME_TARGET_MODE)
     {
-        LogWrite(">>> ForceHiraganaMode: Mode is NOT Hiragana, forcing change")
-        IME_SetConvMode(IME_CMODE_NATIVE, winTitle)
+        LogWrite(">>> ForceImeMode: Mode is NOT " . IME_MODE_NAME . ", forcing change")
+        IME_SetConvMode(IME_TARGET_MODE, winTitle)
         Sleep, %SLEEP_MODE_CHANGE%
         
         ; 設定後のモードを確認
         newMode := IME_GetConvMode(winTitle)
-        LogWrite(">>> ForceHiraganaMode: New mode = " . GetIMEMode(winTitle) . " (" . newMode . ")")
+        LogWrite(">>> ForceImeMode: New mode = " . GetIMEMode(winTitle) . " (" . newMode . ")")
         
-        if (newMode != IME_CMODE_NATIVE)
+        if (newMode != IME_TARGET_MODE)
         {
-            LogWrite(">>> ForceHiraganaMode: WARNING - Failed to set Hiragana mode!")
+            LogWrite(">>> ForceImeMode: WARNING - Failed to set target mode!")
             return false
         }
     }
     else
     {
-        LogWrite(">>> ForceHiraganaMode: Already in Hiragana mode")
+        LogWrite(">>> ForceImeMode: Already in desired mode")
     }
     
-    LogWrite(">>> ForceHiraganaMode: Completed successfully")
+    LogWrite(">>> ForceImeMode: Completed successfully")
     return true
 }
 
@@ -290,13 +340,13 @@ ConvertWithIME(text)
         return text  ; エラー時は入力をそのまま返す
     }
     
-    ; ★★★ 重要：入力モードを「ひらがな」に強制設定 ★★★
-    LogWrite("STEP 3.5: Forcing Hiragana input mode")
-    modeSetSuccess := ForceHiraganaMode(winTitle)
+    ; ★★★ 重要：入力モードをターゲットに強制設定 ★★★
+    LogWrite("STEP 3.5: Forcing IME mode -> " . IME_MODE_NAME)
+    modeSetSuccess := ForceImeMode(winTitle)
     if (!modeSetSuccess)
     {
-        LogWrite("STEP 3.5: ERROR - Failed to set Hiragana mode")
-        FileAppend, ERROR: Failed to set Hiragana mode`n, *, UTF-8
+        LogWrite("STEP 3.5: ERROR - Failed to set target IME mode")
+        FileAppend, ERROR: Failed to set IME mode`n, *, UTF-8
         return text
     }
     
@@ -351,15 +401,15 @@ ConvertWithIME(text)
         LogWrite("STEP 6: IME state after re-activation: " . imeState)
     }
     
-    ; ★★★ 重要：入力モードを再確認して「ひらがな」に戻す ★★★
-    LogWrite("STEP 6.5: Re-verifying and forcing Hiragana mode")
+    ; ★★★ 重要：入力モードを再確認してターゲットに戻す ★★★
+    LogWrite("STEP 6.5: Re-verifying IME mode (target=" . IME_MODE_NAME . ")")
     currentMode := GetIMEMode(winTitle)
     LogWrite("STEP 6.5: Current input mode: " . currentMode)
     
-    modeSetSuccess := ForceHiraganaMode(winTitle)
+    modeSetSuccess := ForceImeMode(winTitle)
     if (!modeSetSuccess)
     {
-        LogWrite("STEP 6.5: WARNING - Failed to re-set Hiragana mode")
+        LogWrite("STEP 6.5: WARNING - Failed to re-set IME mode")
     }
     
     ; 追加の安全待機（確実性重視）
@@ -420,12 +470,13 @@ ConvertWithIME(text)
         LogWrite("STEP 10: WARNING - Result equals input (no conversion occurred)")
     }
     
-    ; IMEをオフにする
-    LogWrite("STEP 11: Turning IME OFF")
-    IME_SET(0, winTitle)
+    ; IMEをターゲットモードに保つ
+    LogWrite("STEP 11: Ensuring IME stays ON in " . IME_MODE_NAME)
+    IME_SET(1, winTitle)
     Sleep, 200
+    IME_SetConvMode(IME_TARGET_MODE, winTitle)
     imeStateFinal := IME_GET(winTitle)
-    LogWrite("STEP 11: IME state final: " . imeStateFinal)
+    LogWrite("STEP 11: IME state final: " . imeStateFinal . " / mode: " . GetIMEMode(winTitle))
     
     endTime := A_TickCount
     totalTime := endTime - startTime
